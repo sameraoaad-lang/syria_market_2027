@@ -2,6 +2,7 @@
 // المشروع الكامل: سوق سوريا الشامل (جميع الملفات المدمجة بدون أي نقص)
 // =====================================================================
 
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+
 
 // ---------------------------------------------------------------------
 // 1. AppConfig & Constants
@@ -32,10 +34,12 @@ class AppConfig {
   static const String adsImagesBucket = 'ads-images';
 }
 
+
 class AppRoutes {
   static const String login = '/login';
   static const String signup = '/signup';
   static const String home = '/home';
+
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -44,13 +48,14 @@ class AppRoutes {
       case signup:
         return MaterialPageRoute(builder: (_) => const SignupScreen());
       case home:
-        // شاشة الرئيسية الافتراضية أو قائمة المحادثات
-        return MaterialPageRoute(builder: (_) => const ConversationsListScreen());
+        // تم ربطها بالواجهة الرئيسية المتكاملة HomeScreen
+        return MaterialPageRoute(builder: (_) => const HomeScreen());
       default:
         return MaterialPageRoute(builder: (_) => const SignupScreen());
     }
   }
 }
+
 
 // ---------------------------------------------------------------------
 // 2. AuthService
@@ -59,15 +64,19 @@ class AuthService {
   AuthService._internal();
   static final AuthService instance = AuthService._internal();
 
+
   final SupabaseClient _client = Supabase.instance.client;
+
 
   bool get isLoggedIn => _client.auth.currentSession != null;
   User? get currentUser => _client.auth.currentUser;
+
 
   bool get isCurrentUserAdmin {
     final email = _client.auth.currentUser?.email;
     return email != null && email.toLowerCase() == kAdminEmail.toLowerCase();
   }
+
 
   Future<AuthResponse> signUp({
     required String email,
@@ -86,6 +95,7 @@ class AuthService {
     return response;
   }
 
+
   Future<AuthResponse> signIn({
     required String email,
     required String password,
@@ -96,35 +106,43 @@ class AuthService {
     );
   }
 
+
   Future<void> signOut() async {
     await _client.auth.signOut();
   }
 }
+
 
 // ---------------------------------------------------------------------
 // 3. SupabaseService (إدارة التخزين، الصور، الإعلانات، والملف الشخصي)
 // ---------------------------------------------------------------------
 const String kAdminEmail = 'sameraoaad@gmail.com';
 
+
 class SupabaseService {
   SupabaseService._();
   static final SupabaseService instance = SupabaseService._();
 
+
   final SupabaseClient _client = Supabase.instance.client;
   SupabaseClient get client => _client;
+
 
   bool get isAdmin {
     final email = _client.auth.currentUser?.email;
     return email != null && email.toLowerCase() == kAdminEmail.toLowerCase();
   }
 
+
   String? get currentUserId => _client.auth.currentUser?.id;
+
 
   Future<String> compressAndUploadImage(File file, {required String adId}) async {
     final compressedFile = await _compressImage(file);
     final fileBytes = await compressedFile.readAsBytes();
     final ext = p.extension(compressedFile.path).replaceAll('.', '');
     final fileName = '$adId/${const Uuid().v4()}.$ext';
+
 
     await _client.storage.from(AppConfig.adsImagesBucket).uploadBinary(
           fileName,
@@ -135,9 +153,11 @@ class SupabaseService {
           ),
         );
 
+
     final publicUrl = _client.storage.from(AppConfig.adsImagesBucket).getPublicUrl(fileName);
     return publicUrl;
   }
+
 
   Future<List<String>> uploadMultipleImages(
     List<File> files, {
@@ -153,12 +173,14 @@ class SupabaseService {
     return urls;
   }
 
+
   Future<File> _compressImage(File file) async {
     final dir = await getTemporaryDirectory();
     final targetPath = p.join(
       dir.path,
       '${const Uuid().v4()}${p.extension(file.path).isEmpty ? '.jpg' : p.extension(file.path)}',
     );
+
 
     final XFile? result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
@@ -169,9 +191,11 @@ class SupabaseService {
       format: CompressFormat.jpeg,
     );
 
+
     if (result == null) return file;
     return File(result.path);
   }
+
 
   Future<void> deleteAdImages(List<String> imageUrls) async {
     final paths = imageUrls.map((url) {
@@ -184,20 +208,24 @@ class SupabaseService {
     await _client.storage.from(AppConfig.adsImagesBucket).remove(paths);
   }
 
+
   Future<String> createAdRecord(Map<String, dynamic> data) async {
     final response = await _client.from('ads').insert(data).select('id').single();
     return response['id'] as String;
   }
 
+
   Future<void> updateAdImages(String adId, List<String> imageUrls) async {
     await _client.from('ads').update({'image_urls': imageUrls}).eq('id', adId);
   }
+
 
   Future<Map<String, dynamic>> fetchAdById(String adId) async {
     await _client.rpc('increment_ad_views', params: {'ad_id_input': adId}).catchError((_) {});
     final response = await _client.from('ads').select().eq('id', adId).single();
     return response;
   }
+
 
   Future<List<Map<String, dynamic>>> fetchMyAds(String userId) async {
     final response = await _client
@@ -208,14 +236,17 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+
   Future<void> markAsSold(String adId, {required bool sold}) async {
     await _client.from('ads').update({'is_sold': sold}).eq('id', adId);
   }
+
 
   Future<void> deleteAd(String adId, {required List<String> imageUrls}) async {
     await deleteAdImages(imageUrls);
     await _client.from('ads').delete().eq('id', adId);
   }
+
 
   Future<List<Map<String, dynamic>>> searchAds({
     String? keyword,
@@ -229,6 +260,7 @@ class SupabaseService {
     int offset = 0,
   }) async {
     var query = _client.from('ads').select().eq('is_active', true);
+
 
     if (keyword != null && keyword.trim().isNotEmpty) {
       query = query.ilike('title', '%${keyword.trim()}%');
@@ -252,20 +284,24 @@ class SupabaseService {
       query = query.lte('price_syp', maxPrice);
     }
 
+
     final response = await query
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     return List<Map<String, dynamic>>.from(response);
   }
 
+
   Future<Map<String, dynamic>?> fetchProfile(String userId) async {
     return await _client.from('profiles').select().eq('id', userId).maybeSingle();
   }
+
 
   Future<void> updateProfile(String userId, Map<String, dynamic> data) async {
     await _client.from('profiles').update(data).eq('id', userId);
   }
 }
+
 
 // ---------------------------------------------------------------------
 // 4. MarketplaceService & MonetizationChatService
@@ -274,6 +310,7 @@ class MarketplaceService {
   MarketplaceService._internal();
   static final MarketplaceService instance = MarketplaceService._internal();
   final SupabaseClient _client = Supabase.instance.client;
+
 
   Future<List<Map<String, dynamic>>> fetchCategories() async {
     try {
@@ -288,10 +325,12 @@ class MarketplaceService {
   }
 }
 
+
 class MonetizationChatService {
   MonetizationChatService._();
   static final MonetizationChatService instance = MonetizationChatService._();
   SupabaseClient get _client => Supabase.instance.client;
+
 
   Future<List<Map<String, dynamic>>> fetchConversations() async {
     final userId = _client.auth.currentUser?.id;
@@ -304,6 +343,7 @@ class MonetizationChatService {
     return List<Map<String, dynamic>>.from(data);
   }
 
+
   Future<List<Map<String, dynamic>>> fetchMessages(String conversationId) async {
     final data = await _client
         .from('chat_messages')
@@ -312,6 +352,7 @@ class MonetizationChatService {
         .order('created_at', ascending: true);
     return List<Map<String, dynamic>>.from(data);
   }
+
 
   Future<void> sendMessage({
     required String conversationId,
@@ -326,6 +367,7 @@ class MonetizationChatService {
     });
   }
 
+
   Future<void> markMessagesAsRead(String conversationId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
@@ -335,6 +377,7 @@ class MonetizationChatService {
         .eq('conversation_id', conversationId)
         .neq('sender_id', userId);
   }
+
 
   RealtimeChannel subscribeToConversationMessages({
     required String conversationId,
@@ -359,16 +402,19 @@ class MonetizationChatService {
     return channel;
   }
 
+
   Future<void> unsubscribe(RealtimeChannel channel) async {
     await _client.removeChannel(channel);
   }
 }
+
 
 // ---------------------------------------------------------------------
 // 5. AppTheme
 // ---------------------------------------------------------------------
 class AppTheme {
   AppTheme._();
+
 
   static ThemeData get lightTheme {
     final ColorScheme colorScheme = ColorScheme.fromSeed(
@@ -380,7 +426,9 @@ class AppTheme {
       brightness: Brightness.light,
     );
 
+
     final TextTheme baseTextTheme = GoogleFonts.cairoTextTheme();
+
 
     final TextTheme textTheme = baseTextTheme.copyWith(
       displayLarge: baseTextTheme.displayLarge?.copyWith(
@@ -409,6 +457,7 @@ class AppTheme {
         fontWeight: FontWeight.w700,
       ),
     );
+
 
     return ThemeData(
       useMaterial3: true,
@@ -470,6 +519,7 @@ class AppTheme {
   }
 }
 
+
 // ---------------------------------------------------------------------
 // 6. Custom Widgets (CustomTextField, CustomButton)
 // ---------------------------------------------------------------------
@@ -483,6 +533,7 @@ class CustomTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextInputAction textInputAction;
 
+
   const CustomTextField({
     super.key,
     required this.controller,
@@ -494,6 +545,7 @@ class CustomTextField extends StatelessWidget {
     this.suffixIcon,
     this.textInputAction = TextInputAction.next,
   });
+
 
   @override
   Widget build(BuildContext context) {
@@ -515,12 +567,14 @@ class CustomTextField extends StatelessWidget {
   }
 }
 
+
 class CustomButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool isLoading;
   final bool outlined;
   final IconData? icon;
+
 
   const CustomButton({
     super.key,
@@ -530,6 +584,7 @@ class CustomButton extends StatelessWidget {
     this.outlined = false,
     this.icon,
   });
+
 
   @override
   Widget build(BuildContext context) {
@@ -553,12 +608,14 @@ class CustomButton extends StatelessWidget {
             ],
           );
 
+
     if (outlined) {
       return OutlinedButton(
         onPressed: isLoading ? null : onPressed,
         child: child,
       );
     }
+
 
     return ElevatedButton(
       onPressed: isLoading ? null : onPressed,
@@ -567,15 +624,18 @@ class CustomButton extends StatelessWidget {
   }
 }
 
+
 // ---------------------------------------------------------------------
-// 7. Screens (SignupScreen & ConversationsListScreen)
+// 7. Screens (SignupScreen & HomeScreen الواجهة الرئيسية الجديدة)
 // ---------------------------------------------------------------------
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
+
   @override
   State<SignupScreen> createState() => _SignupScreenState();
 }
+
 
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
@@ -585,9 +645,11 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+
 
   @override
   void dispose() {
@@ -599,8 +661,10 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+
   Future<void> _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
+
 
     setState(() => _isLoading = true);
     try {
@@ -611,7 +675,9 @@ class _SignupScreenState extends State<SignupScreen> {
         phone: _phoneController.text,
       );
 
+
       if (!mounted) return;
+
 
       final bool isAdmin = AuthService.instance.isCurrentUserAdmin;
       _showSnack(
@@ -619,6 +685,7 @@ class _SignupScreenState extends State<SignupScreen> {
             ? 'تم إنشاء حساب المشرف بنجاح.'
             : 'تم إنشاء الحساب بنجاح، أهلاً بك في سوق سوريا الشامل.',
       );
+
 
       Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.home,
@@ -633,6 +700,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+
   void _showSnack(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -641,6 +709,7 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -787,33 +856,388 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 }
 
-class ConversationsListScreen extends StatelessWidget {
-  const ConversationsListScreen({super.key});
+
+// الواجهة الرئيسية المحدثة والمطابقة للصورة المطلوبة تماماً
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+  String _selectedProvince = 'كل المحافظات';
+  
+  final List<Map<String, dynamic>> _categories = [
+    {'name': 'الكل', 'icon': Icons.apps, 'isSelected': true},
+    {'name': 'سيارات ومركبات', 'icon': Icons.directions_car, 'isSelected': false},
+    {'name': 'عقارات وأملاك', 'icon': Icons.home, 'isSelected': false},
+    {'name': 'موبايلات وأجهزة', 'icon': Icons.phone_android, 'isSelected': false},
+    {'name': 'إلكترونيات', 'icon': Icons.laptop, 'isSelected': false},
+    {'name': 'وظائف وخدمات', 'icon': Icons.work, 'isSelected': false},
+    {'name': 'أثاث وأدوات منزلية', 'icon': Icons.chair, 'isSelected': false},
+  ];
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الرسائل والمحادثات')),
-      body: const Center(
-        child: Text('مرحباً بك في لوحة تحكم سوق سوريا الشامل'),
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: Colors.white,
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedProvince,
+                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF2D6A4F)),
+                              items: ['كل المحافظات', 'دمشق', 'حلب', 'حمص', 'اللاذقية', 'طرطوس']
+                                  .map((province) => DropdownMenuItem(
+                                        value: province,
+                                        child: Text(
+                                          province,
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2D6A4F)),
+                                        ),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) {
+                                setState(() => _selectedProvince = val!);
+                              },
+                            ),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text(
+                                  'سوق سوريا الشامل 2026',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+                                ),
+                                Text(
+                                  'المنصة الشاملة الأولى للإعلانات المبوبة',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2D6A4F),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.storefront, color: Colors.white, size: 22),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              textDirection: TextDirection.rtl,
+                              decoration: InputDecoration(
+                                hintText: 'ابحث عن سيارات، شقق، هواتف، وظائف...',
+                                hintStyle: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.tune, color: Color(0xFF2D6A4F)),
+                            onPressed: () {},
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFD97706), Color(0xFFB45309)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('شركات كبرى', style: TextStyle(color: Colors.white, fontSize: 10)),
+                          ),
+                          const Row(
+                            children: [
+                              Text('إعلانات ممولة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              SizedBox(width: 4),
+                              Icon(Icons.campaign, color: Colors.white, size: 16),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1E3A8A),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(12),
+                          bottomRight: Radius.circular(12),
+                        ),
+                      ),
+                      child: const Column(
+                        children: [
+                          Icon(Icons.flight, color: Colors.lightBlueAccent, size: 36),
+                          SizedBox(height: 6),
+                          Text(
+                            'الخطوط الجوية السورية',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'سافر بأمان مع السورية - حجزورات مخفضة للرحلات الداخلية والخارجية',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white70, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('8 أقسام', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    const Text('الأقسام والخدمات', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 85,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: _categories.length,
+                  itemBuilder: (context, index) {
+                    final cat = _categories[index];
+                    final bool isSelected = cat['isSelected'];
+                    return Container(
+                      width: 80,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Column(
+                        children: [
+                          Container(
+                            height: 50,
+                            width: 50,
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF2D6A4F) : Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: isSelected ? Colors.transparent : Colors.grey.shade300),
+                            ),
+                            child: Icon(
+                              cat['icon'],
+                              color: isSelected ? Colors.white : const Color(0xFF2D6A4F),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            cat['name'],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(6)),
+                      child: const Text('8 إعلان', style: TextStyle(color: Color(0xFF2D6A4F), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                    const Text('أحدث الإعلانات المضافة', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.72,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: 2,
+                itemBuilder: (context, index) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [BoxShadow(color: Colors.grey.withValues(alpha: 0.1), blurRadius: 4, spreadRadius: 1)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              height: 110,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                              ),
+                              child: const Center(child: Icon(Icons.image, color: Colors.grey, size: 40)),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(4)),
+                                child: const Text('مميز', style: TextStyle(color: Colors.white, fontSize: 10)),
+                              ),
+                            ),
+                            const Positioned(
+                              top: 8,
+                              left: 8,
+                              child: CircleAvatar(
+                                radius: 14,
+                                backgroundColor: Colors.white,
+                                child: Icon(Icons.favorite_border, size: 16, color: Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                index == 0 ? 'شقة سكنية ديلاكس 160 م² في المزة' : 'كيا سيراتو 2022 بحالة الوكالة',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                index == 0 ? '850,000,000 ل.س' : '165,000,000 ل.س',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(Icons.location_on, size: 12, color: Colors.grey),
+                                  const SizedBox(width: 2),
+                                  Text('دمشق', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                                  const Spacer(),
+                                  Text('منذ ساعتين', style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF2D6A4F),
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'الرئيسية'),
+          BottomNavigationBarItem(icon: Icon(Icons.bookmark_border), label: 'المفضلة'),
+          BottomNavigationBarItem(
+            icon: CircleAvatar(
+              backgroundColor: Color(0xFF2D6A4F),
+              radius: 18,
+              child: Icon(Icons.add, color: Colors.white, size: 20),
+            ),
+            label: 'أضف إعلانك',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'الرسائل'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'حسابي'),
+        ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------
-// 8. (ملاحظة) نقطة الدخول الرئيسية main() وكلاس SouqSyriaApp موجودان
-// بنهاية هذا الملف تحت عنوان "13. Full App Root Entry Point"، وهي
-// النسخة الوحيدة المعتمدة. تم حذف نسخة مكررة منهما كانت موجودة هنا
-// سابقاً لأن Dart لا يسمح بتعريف نفس الدالة/الكلاس مرتين في نفس
-// الملف (خطأ ترجمة "duplicate definition").
-// ---------------------------------------------------------------------
-// =====================================================================
-// المشروع الكامل (الجزء الثاني): سوق سوريا الشامل (إدارة الإعلانات والشاشات)
-// =====================================================================
-// (ملاحظة: تم حذف استيرادات مكررة كانت هنا - dart:io، flutter/material،
-// supabase_flutter - لأنها موجودة أصلاً بأعلى الملف، وDart لا يسمح
-// بوجود أي "import" بعد بداية تعريف الكلاسات، فهذا خطأ ترجمة مباشر.)
 
 // ---------------------------------------------------------------------
 // 9. LoginScreen (شاشة تسجيل الدخول المتكاملة)
@@ -821,9 +1245,11 @@ class ConversationsListScreen extends StatelessWidget {
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
+
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
@@ -832,6 +1258,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -839,8 +1266,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
+
 
     setState(() => _isLoading = true);
     try {
@@ -849,11 +1278,14 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
 
+
       if (!mounted) return;
+
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم تسجيل الدخول بنجاح')),
       );
+
 
       Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.home,
@@ -871,6 +1303,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -936,6 +1369,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+
 // ---------------------------------------------------------------------
 // 10. Ad Details & Management Screen (شاشة تفاصيل الإعلان والتحكم به)
 // ---------------------------------------------------------------------
@@ -943,19 +1377,23 @@ class AdDetailScreen extends StatefulWidget {
   final String adId;
   const AdDetailScreen({super.key, required this.adId});
 
+
   @override
   State<AdDetailScreen> createState() => _AdDetailScreenState();
 }
 
+
 class _AdDetailScreenState extends State<AdDetailScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _adData;
+
 
   @override
   void initState() {
     super.initState();
     _loadAdDetails();
   }
+
 
   Future<void> _loadAdDetails() async {
     try {
@@ -971,6 +1409,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -980,6 +1419,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       );
     }
 
+
     if (_adData == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('تفاصيل الإعلان')),
@@ -987,9 +1427,11 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       );
     }
 
+
     final ad = _adData!;
     final List images = ad['image_urls'] ?? [];
     final bool isSold = ad['is_sold'] ?? false;
+
 
     return Scaffold(
       appBar: AppBar(
@@ -1074,6 +1516,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   }
 }
 
+
 // ---------------------------------------------------------------------
 // 11. Chat Room Screen (شاشة المحادثة الفورية)
 // ---------------------------------------------------------------------
@@ -1081,15 +1524,18 @@ class ChatRoomScreen extends StatefulWidget {
   final String conversationId;
   final String peerName;
 
+
   const ChatRoomScreen({
     super.key,
     required this.conversationId,
     required this.peerName,
   });
 
+
   @override
   State<ChatRoomScreen> createState() => _ChatRoomScreenState();
 }
+
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _messageController = TextEditingController();
@@ -1097,16 +1543,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   bool _isLoading = true;
   RealtimeChannel? _chatChannel;
 
+
   @override
   void initState() {
     super.initState();
     _initChat();
   }
 
+
   Future<void> _initChat() async {
     try {
       final messages = await MonetizationChatService.instance.fetchMessages(widget.conversationId);
       await MonetizationChatService.instance.markMessagesAsRead(widget.conversationId);
+
 
       if (mounted) {
         setState(() {
@@ -1114,6 +1563,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           _isLoading = false;
         });
       }
+
 
       _chatChannel = MonetizationChatService.instance.subscribeToConversationMessages(
         conversationId: widget.conversationId,
@@ -1131,6 +1581,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
+
   @override
   void dispose() {
     if (_chatChannel != null) {
@@ -1140,9 +1591,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.dispose();
   }
 
+
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
+
 
     _messageController.clear();
     try {
@@ -1159,9 +1612,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.peerName)),
@@ -1176,6 +1631,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
                       final isMe = msg['sender_id'] == currentUserId;
+
 
                       return Align(
                         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -1225,10 +1681,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 }
-// =====================================================================
-// المشروع الكامل (الجزء الثالث): سوق سوريا الشامل (الفلترة، البحث والتشغيل)
-// =====================================================================
-// (نفس الملاحظة: تم حذف استيرادات مكررة موجودة أصلاً بأعلى الملف)
+
 
 // ---------------------------------------------------------------------
 // 12. Search & Filter Screen (شاشة البحث والفلترة المتقدمة للإعلانات)
@@ -1236,9 +1689,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 class SearchAdsScreen extends StatefulWidget {
   const SearchAdsScreen({super.key});
 
+
   @override
   State<SearchAdsScreen> createState() => _SearchAdsScreenState();
 }
+
 
 class _SearchAdsScreenState extends State<SearchAdsScreen> {
   final TextEditingController _searchController = TextEditingController();
@@ -1247,9 +1702,11 @@ class _SearchAdsScreenState extends State<SearchAdsScreen> {
   double? _minPrice;
   double? _maxPrice;
 
+
   List<Map<String, dynamic>> _searchResults = [];
   List<Map<String, dynamic>> _categories = [];
   bool _isLoading = false;
+
 
   final List<String> _syrianProvinces = [
     'دمشق',
@@ -1268,12 +1725,14 @@ class _SearchAdsScreenState extends State<SearchAdsScreen> {
     'القنيطرة'
   ];
 
+
   @override
   void initState() {
     super.initState();
     _loadCategories();
     _performSearch();
   }
+
 
   Future<void> _loadCategories() async {
     final cats = await MarketplaceService.instance.fetchCategories();
@@ -1283,6 +1742,7 @@ class _SearchAdsScreenState extends State<SearchAdsScreen> {
       });
     }
   }
+
 
   Future<void> _performSearch() async {
     setState(() => _isLoading = true);
@@ -1305,11 +1765,13 @@ class _SearchAdsScreenState extends State<SearchAdsScreen> {
     }
   }
 
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1340,11 +1802,6 @@ class _SearchAdsScreenState extends State<SearchAdsScreen> {
               ],
             ),
           ),
-          // === تمت إضافة هذا القسم لأن الشاشة كانت تجلب المحافظات
-          // والأقسام وتُخزّنها بمتغيرات (_selectedProvince،
-          // _selectedCategory، _categories) دون عرضها أبداً بالواجهة،
-          // رغم أن عنوان الشاشة "الفلترة المتقدمة". الآن الفلترة تعمل
-          // فعلياً وتستخدم كل المتغيرات المعرّفة أصلاً بالكود. ===
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Column(
@@ -1448,11 +1905,13 @@ class _SearchAdsScreenState extends State<SearchAdsScreen> {
   }
 }
 
+
 // ---------------------------------------------------------------------
 // 13. Full App Root Entry Point (main.dart النهائي المكتمل)
 // ---------------------------------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
 
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
@@ -1462,15 +1921,19 @@ Future<void> main() async {
     ),
   );
 
+
   runApp(const SouqSyriaApp());
 }
+
 
 class SouqSyriaApp extends StatelessWidget {
   const SouqSyriaApp({super.key});
 
+
   @override
   Widget build(BuildContext context) {
     final bool isLoggedIn = AuthService.instance.isLoggedIn;
+
 
     return MaterialApp(
       title: AppConfig.appName,
